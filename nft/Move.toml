@@ -1,0 +1,14 @@
+[package]
+name = "NftConsoleDrop"
+version = "0.0.1"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet" }
+Common = { local = "../common" }
+
+
+[addresses]
+consoledrop="0x0"
+sui="0x2"
+admin = "0xd67b1e7e1d61f6de5b6828b952dd9bb4f28166401483a12e37a7a7018567ecbd"
+treasury_admin = "0xd67b1e7e1d61f6de5b6828b952dd9bb4f28166401483a12e37a7a7018567ecbd"
