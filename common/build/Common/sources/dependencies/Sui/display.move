@@ -40,7 +40,7 @@ module sui::display {
     /// Display<0x...::capy::Capy> {
     ///  fields:
     ///    <name, "Capy { genes }">
-    ///    <link, "https://capy.art/capy/{ id }">
+    ///    <baseURI, "https://capy.art/capy/{ id }">
     ///    <image, "https://api.capy.art/capy/{ id }/svg">
     ///    <description, "Lovely Capy, one of many">
     /// }
@@ -51,7 +51,7 @@ module sui::display {
     struct Display<phantom T: key> has key, store {
         id: UID,
         /// Contains fields for display. Currently supported
-        /// fields are: name, link, image and description.
+        /// fields are: name, baseURI, image and description.
         fields: VecMap<String, String>,
         /// Version that can only be updated manually by the Publisher.
         version: u16
@@ -220,7 +220,7 @@ module sui::display_tests {
         let display = display::new<Capy>(&pub, test::ctx(&mut test));
 
         display::add(&mut display, utf8(b"name"), utf8(b"Capy {name}"));
-        display::add(&mut display, utf8(b"link"), utf8(b"https://capy.art/capy/{id}"));
+        display::add(&mut display, utf8(b"baseURI"), utf8(b"https://capy.art/capy/{id}"));
         display::add(&mut display, utf8(b"image"), utf8(b"https://api.capy.art/capy/{id}/svg"));
         display::add(&mut display, utf8(b"description"), utf8(b"A Lovely Capy"));
 

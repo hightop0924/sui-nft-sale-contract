@@ -57,7 +57,7 @@ module common::tier {
         transfer::public_transfer(adminCap, sender(ctx));
     }
 
-    public entry fun change_admin(admin_cap: TAdminCap, to: address) {
+    public entry fun transferOwnership(admin_cap: TAdminCap, to: address) {
         transfer::public_transfer(admin_cap, to);
     }
 

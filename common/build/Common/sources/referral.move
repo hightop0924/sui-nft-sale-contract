@@ -104,7 +104,7 @@ module common::referral {
         transfer::transfer(adminCap, sender(ctx));
     }
 
-    public entry fun change_admin(admin: AdminCap, to: address) {
+    public entry fun transferOwnership(admin: AdminCap, to: address) {
         transfer(admin, to);
     }
 

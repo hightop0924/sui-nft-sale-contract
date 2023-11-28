@@ -133,14 +133,9 @@ module consoledrop::consoledrop {
         type: u8,
         //collection type
         name: vector<u8>,
-        link: vector<u8>,
-        image_url: vector<u8>,
-        description: vector<u8>,
-        project_url: vector<u8>,
-        edition: u64,
-        thumbnail_url: vector<u8>,
+        baseURI: vector<u8>,
+        contractURI: vector<u8>,
         creator: vector<u8>,
-        attributes: VecMap<vector<u8>, vector<u8>> //use vecmap for collection for easy
     }
 
     ///NFT pool, owned by project owner, listed by admin
@@ -200,7 +195,7 @@ module consoledrop::consoledrop {
         public_transfer(NftTreasuryCap { id: object::new(ctx) }, @treasury_admin);
     }
 
-    public fun change_admin(adminCap: NftAdminCap, to: address) {
+    public fun transferOwnership(adminCap: NftAdminCap, to: address) {
         public_transfer(adminCap, to);
     }
 
@@ -295,20 +290,6 @@ module consoledrop::consoledrop {
         transfer::share_object(pool);
     }
 
-    public fun add_attribute<COIN>(_adminCap: &NftAdminCap,
-                                   pool: &mut NftPool<COIN>,
-                                   type: u8,
-                                   key: vector<u8>,
-                                   value: vector<u8>) {
-        assert!(pool.state == ROUND_STATE_INIT, ERR_INVALID_STATE);
-        assert!(vector::length<u8>(&key) > 0
-            && vector::length<u8>(&value) > 0
-            && table::contains<u8, NftTemplate>(&pool.templates, type), ERR_BAD_NFT_INFO);
-        let collection = table::borrow_mut<u8, NftTemplate>(&mut pool.templates, type);
-        assert!(!vec_map::contains<vector<u8>, vector<u8>>(&collection.attributes, &key), ERR_BAD_NFT_INFO);
-        vec_map::insert<vector<u8>, vector<u8>>(&mut collection.attributes, key, value);
-    }
-
     public fun remove_collection<COIN>(_admin_cap: &NftAdminCap, type: u8, pool: &mut NftPool<COIN>) {
         table::remove(&mut pool.templates, type);
 
@@ -325,12 +306,8 @@ module consoledrop::consoledrop {
                                     price: u64, //price with coin
                                     type: u8, //collection type
                                     name: vector<u8>,
-                                    link: vector<u8>,
-                                    image_url: vector<u8>,
-                                    description: vector<u8>,
-                                    project_url: vector<u8>,
-                                    edition: u64,
-                                    thumbnail_url: vector<u8>,
+                                    baseURI: vector<u8>,
+                                    contractURI: vector<u8>,
                                     creator: vector<u8>,
                                     _ctx: &mut TxContext) {
         assert!(pool.state == ROUND_STATE_INIT, ERR_INVALID_STATE);
@@ -339,12 +316,8 @@ module consoledrop::consoledrop {
             && (price > 0)
             && (type > 0)
             && vector::length<u8>(&name) > 0
-            && vector::length<u8>(&link) > 0
-            && vector::length<u8>(&image_url) > 0
-            && vector::length<u8>(&description) > 0
-            && vector::length<u8>(&project_url) > 0
-            && (edition > 0)
-            && vector::length<u8>(&thumbnail_url) > 0
+            && vector::length<u8>(&baseURI) > 0
+            && vector::length<u8>(&contractURI) > 0
             && vector::length<u8>(&creator) > 0,
             ERR_BAD_NFT_INFO);
 
@@ -355,14 +328,9 @@ module consoledrop::consoledrop {
             price,
             type,
             name,
-            link,
-            image_url,
-            description,
-            project_url,
-            edition,
-            thumbnail_url,
+            baseURI,
+            contractURI,
             creator,
-            attributes: vec_map::empty<vector<u8>, vector<u8>>()
         });
 
         //update cap
@@ -554,9 +522,8 @@ module consoledrop::consoledrop {
     }
 
     fun mint_nft_batch_int(nftAmt: u64, collection: &NftTemplate, ctx: &mut TxContext): vector<PriNFT> {
-        mint_batch(nftAmt, collection.name, collection.link, collection.image_url,
-            collection.description, collection.project_url, collection.edition,
-            collection.thumbnail_url, collection.creator, &collection.attributes, ctx)
+        mint_batch(nftAmt, collection.name, collection.baseURI, collection.contractURI,
+            collection.creator, ctx)
     }
 
     public fun stop_pool<COIN>(_adminCap: &NftAdminCap, pool: &mut NftPool<COIN>, system_clock: &Clock) {

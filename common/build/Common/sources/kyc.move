@@ -39,7 +39,7 @@ module common::kyc {
         });
     }
 
-    public entry fun change_admin(admin_cap: AdminCap, to: address) {
+    public entry fun transferOwnership(admin_cap: AdminCap, to: address) {
         transfer(admin_cap, to);
     }
 

@@ -14,15 +14,10 @@ module consoledrop::nft_private {
     /// Allow custome attributes
     struct PriNFT has key, store {
         id: UID,
-        name: string::String, //"{name}",
-        link: Url, //"https://nft-heroes.io/hero/{id}",
-        image_url: Url, //"ipfs://{img_url}",
-        description: string::String, //"A true Hero of the Sui ecosystem!",
-        project_url: Url, //"https://sui-heroes.io",
-        edition: u64, //101
-        thumbnail_url: Url, //"{thumbnail_image_url",
-        creator: string::String, //"Unknown NFT Fan"
-        attributes: Table<vector<u8>,  vector<u8>>
+        name: string::String, 
+        baseURI: string::String, 
+        contractURI: string::String, 
+        creator: string::String, 
     }
 
     struct MintNFTEvent has copy, drop {
@@ -35,27 +30,17 @@ module consoledrop::nft_private {
     /// Create a new NFT
     public(friend) fun mint(
         name: vector<u8>,
-        link: vector<u8>,
-        image_url: vector<u8>,
-        description: vector<u8>,
-        project_url: vector<u8>,
-        edition: u64,
-        thumbnail_url: vector<u8>,
+        baseURI: vector<u8>,
+        contractURI: vector<u8>,
         creator: vector<u8>,
-        attributes: Table<vector<u8>,  vector<u8>>,
         ctx: &mut TxContext
     ): PriNFT {
         PriNFT {
             id: object::new(ctx),
             name: string::utf8(name),
-            link: url::new_unsafe_from_bytes(link),
-            image_url: url::new_unsafe_from_bytes(image_url),
-            description: string::utf8(description),
-            project_url: url::new_unsafe_from_bytes(project_url),
-            edition,
-            thumbnail_url: url::new_unsafe_from_bytes(thumbnail_url),
+            baseURI: string::utf8(baseURI),
+            contractURI: string::utf8(contractURI),
             creator: string::utf8(creator),
-            attributes
         }
     }
 
@@ -63,29 +48,19 @@ module consoledrop::nft_private {
     #[test_only]
     public fun mint_for_test(
         name: vector<u8>,
-        link: vector<u8>,
-        image_url: vector<u8>,
-        description: vector<u8>,
-        project_url: vector<u8>,
-        edition: u64,
-        thumbnail_url: vector<u8>,
+        baseURI: vector<u8>,
+        contractURI: vector<u8>,
         creator: vector<u8>,
-        attributes: Table<vector<u8>,  vector<u8>>,
         ctx: &mut TxContext): PriNFT{
-        mint(name, link, image_url, description, project_url, edition, thumbnail_url, creator, attributes, ctx)
+        mint(name, baseURI, contractURI, creator, ctx)
     }
 
     public(friend) fun mint_batch(
         count: u64,
         name: vector<u8>,
-        link: vector<u8>,
-        image_url: vector<u8>,
-        description: vector<u8>,
-        project_url: vector<u8>,
-        edition: u64,
-        thumbnail_url: vector<u8>,
+        baseURI: vector<u8>,
+        contractURI: vector<u8>,
         creator: vector<u8>,
-        attributes: &VecMap<vector<u8>, vector<u8>>,
         ctx: &mut TxContext
     ): vector<PriNFT> {
         assert!(count > 0, 1);
@@ -94,44 +69,21 @@ module consoledrop::nft_private {
         while (count > 0){
             vector::push_back(
                 &mut nfts,
-                mint(name, link, image_url, description, project_url,
-                    edition, thumbnail_url, creator, vec2map<vector<u8>, vector<u8>>(attributes, ctx), ctx));
+                mint(name, baseURI, contractURI, creator, ctx));
             count = count -1;
         };
 
         nfts
     }
 
-    /// Update the `description` of `nft` to `new_description`
-    public(friend) fun update_description(
-        nft: &mut PriNFT,
-        new_description: vector<u8>,
-    ) {
-        nft.description = string::utf8(new_description)
-    }
-
-    #[test_only]
-    public fun update_description_for_test(
-        nft: &mut PriNFT,
-        new_description: vector<u8>,
-    ) {
-       update_description(nft, new_description)
-    }
-
     /// Permanently delete `nft`
     public(friend) fun burn(nft: PriNFT) {
         let PriNFT { id,
             name: _name,
-            link: _link,
-            image_url: _image_url,
-            description:_description,
-            project_url:_project_url,
-            edition:_edition,
-            thumbnail_url: _thumbnail_url,
+            baseURI: _baseURI,
+            contractURI: _contractURI,
             creator: _creator,
-            attributes
         } = nft;
-        table::drop(attributes);
         object::delete(id);
     }
 
@@ -145,16 +97,26 @@ module consoledrop::nft_private {
         &nft.name
     }
 
-    public fun description(nft: &PriNFT): &string::String {
-        &nft.description
+    public(friend) fun update_baseURI(
+        nft: &mut PriNFT,
+        baseURI : vector<u8>,
+    ) {
+        nft.baseURI = string::utf8(baseURI)
     }
 
-    public fun image_url(nft: &PriNFT): &Url {
-        &nft.image_url
+    public(friend) fun update_contractURI(
+        nft: &mut PriNFT,
+        contractURI : vector<u8>,
+    ) {
+        nft.contractURI = string::utf8(contractURI)
     }
 
-    public fun project_url(nft: &PriNFT): &Url {
-        &nft.project_url
+    public fun contractURI(nft: &PriNFT): &string::String {
+        &nft.contractURI
+    }
+    
+    public fun baseURI(nft: &PriNFT): &string::String {
+        &nft.baseURI
     }
 
     public fun creator(nft: &PriNFT): &string::String {
@@ -196,15 +158,10 @@ module consoledrop::private_nftTests {
             {
                 let nft = nft_private::mint_for_test(
                     b"name",
-                    b"link",
-                    b"image_url",
-                    b"description",
-                    b"project_url",
-                    1,
-                    b"thumbnail_url",
+                    b"baseURI",
+                    b"contractURI",
                     b"creator",
-                    table::new<vector<u8>,  vector<u8>>(test_scenario::ctx(&mut scenario))
-                    , ts::ctx(&mut scenario));
+                    ts::ctx(&mut scenario));
                 transfer::public_transfer(nft,  addr1);
             };
         // send it from A to B

@@ -38,8 +38,8 @@ module consoledrop::consoledrop_entries {
                                           price: u64, //price with coin
                                           type: u8, //collection type
                                           name: vector<u8>,
-                                          link: vector<u8>,
-                                          image_url: vector<u8>,
+                                          baseURI: vector<u8>,
+                                          contractURI: vector<u8>,
                                           description: vector<u8>,
                                           project_url: vector<u8>,
                                           edition: u64,
@@ -48,8 +48,7 @@ module consoledrop::consoledrop_entries {
                                           _ctx: &mut TxContext
     ) {
         consoledrop::add_collection<COIN>(_adminCap, pool, cap, allocate, price, type,
-            name, link, image_url, description
-            , project_url, edition, thumbnail_url, creator, _ctx);
+            name, baseURI, contractURI, creator, _ctx);
     }
 
     public entry fun start_pool<COIN>(adminCap: &NftAdminCap, pool: &mut NftPool<COIN>, system_clock: &Clock) {
@@ -95,16 +94,8 @@ module consoledrop::consoledrop_entries {
         consoledrop::withdraw_fund(_adminCap, pool, amt, ctx);
     }
 
-    public entry fun change_admin(adminCap: NftAdminCap, to: address) {
-        consoledrop::change_admin(adminCap, to);
-    }
-
-    public entry fun add_attribute<COIN>(_adminCap: &NftAdminCap,
-                                         pool: &mut NftPool<COIN>,
-                                         type: u8,
-                                         key: vector<u8>,
-                                         value: vector<u8>) {
-        consoledrop::add_attribute<COIN>(_adminCap, pool, type, key, value);
+    public entry fun transferOwnership(adminCap: NftAdminCap, to: address) {
+        consoledrop::transferOwnership(adminCap, to);
     }
 
     public entry fun remove_collection<COIN>(_admin_cap: &NftAdminCap, type: u8, pool: &mut NftPool<COIN>) {
