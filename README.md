@@ -1,9 +1,7 @@
-#sui-contracts
+# SUI NFT Contract
 
 These are most important functions:
-- Token fund raising
-- NFT collection fundraising
-- Staking
-- Permissionless donation
-- Swap
-- DAO
+- Mint NFT
+- Airdrop NFT
+- Presale NFT
+- Publicsale NFT
