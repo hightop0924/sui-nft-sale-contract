@@ -17,7 +17,6 @@ module consoledrop::consoledrop {
     use w3libs::u256;
     use sui::vec_map::VecMap;
     use sui::vec_map;
-    use common::kyc::{Kyc, hasKYC};
 
     struct CONSOLEDROP has drop {}
 
@@ -173,7 +172,6 @@ module consoledrop::consoledrop {
         //total sold in nft count
         orders: Table<address, NftOrder>,
         //Buy order tables, use dynamic fields. if whitelist enabled: add whitelist address to this first that init order to zero
-        require_kyc: bool
     }
 
     struct NftRemoveCollection has copy, drop {
@@ -228,7 +226,6 @@ module consoledrop::consoledrop {
     const ERR_INVALID_ADMIN: u64 = 6022;
     const ERR_NFT_CAP: u64 = 6023;
     const ERR_BAD_ATTRIBUTE: u64 = 6024;
-    const ERR_NOT_KYC: u64 = 6025;
 
 
     ///! NFT scope
@@ -243,7 +240,6 @@ module consoledrop::consoledrop {
                                  start_time: u64,
                                  end_time: u64,
                                  system_clock: &Clock,
-                                 require_kyc: bool,
                                  ctx: &mut TxContext) {
         //@todo review validate
         assert!(soft_cap_percent > 0 && soft_cap_percent < 10000, ERR_INVALID_CAP);
@@ -270,7 +266,6 @@ module consoledrop::consoledrop {
             total_sold_coin: 0,
             total_sold_nft: 0,
             orders: table::new<address, NftOrder>(ctx),
-            require_kyc
         };
 
         emit(NftPoolCreatedEvent {
@@ -375,16 +370,12 @@ module consoledrop::consoledrop {
                              nft_amounts: vector<u64>,
                              pool: &mut NftPool<COIN>,
                              system_clock: &Clock,
-                             kyc: &Kyc,
                              ctx: &mut TxContext) {
         //check pool state
         assert!(pool.state == ROUND_STATE_RASING, ERR_NOT_FUNDRAISING);
 
         //check whitelist
         let buyer = sender(ctx);
-        if (pool.require_kyc) {
-            assert!(hasKYC(buyer, kyc), ERR_NOT_KYC);
-        };
         let hasOrder = table::contains(&pool.orders, buyer);
         assert!(!pool.use_whitelist || hasOrder, ERR_NOT_IN_WHITELIST);
 

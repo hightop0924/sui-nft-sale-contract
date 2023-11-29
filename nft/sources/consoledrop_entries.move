@@ -5,7 +5,6 @@ module consoledrop::consoledrop_entries {
     use sui::tx_context::TxContext;
     use sui::clock::Clock;
     use sui::coin::Coin;
-    use common::kyc::Kyc;
 
     public entry fun create_pool<COIN>(_adminCap: &NftAdminCap,
                                        owner: address,
@@ -16,7 +15,6 @@ module consoledrop::consoledrop_entries {
                                        start_time: u64,
                                        end_time: u64,
                                        system_clock: &Clock,
-                                       require_kyc: bool,
                                        ctx: &mut TxContext) {
         consoledrop::create_pool<COIN>(_adminCap,
             owner,
@@ -27,7 +25,6 @@ module consoledrop::consoledrop_entries {
             start_time,
             end_time,
             system_clock,
-            require_kyc,
             ctx);
     }
 
@@ -60,9 +57,8 @@ module consoledrop::consoledrop_entries {
                                    nft_amounts: vector<u64>,
                                    pool: &mut NftPool<COIN>,
                                    system_clock: &Clock,
-                                   kyc: &Kyc,
                                    ctx: &mut TxContext) {
-        consoledrop::buy_nft<COIN>(coin_in, nft_types, nft_amounts, pool, system_clock, kyc, ctx);
+        consoledrop::buy_nft<COIN>(coin_in, nft_types, nft_amounts, pool, system_clock, ctx);
     }
 
     public entry fun stop_pool<COIN>(_adminCap: &NftAdminCap, pool: &mut NftPool<COIN>, system_clock: &Clock) {
