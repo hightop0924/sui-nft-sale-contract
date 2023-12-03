@@ -1,4 +1,6 @@
-/// Implementation of math functions needed for Multi Swap.
+// Copyright (c) Web3 Labs, Inc.
+// SPDX-License-Identifier: GPL-3.0
+
 module w3libs::math {
     // Errors codes.
 

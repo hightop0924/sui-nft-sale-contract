@@ -11,6 +11,7 @@ module sui::object {
     friend sui::dynamic_field;
     friend sui::dynamic_object_field;
     friend sui::transfer;
+    friend sui::authenticator_state;
 
     #[test_only]
     friend sui::test_scenario;
@@ -20,6 +21,9 @@ module sui::object {
 
     /// The hardcoded ID for the singleton Clock Object.
     const SUI_CLOCK_OBJECT_ID: address = @0x6;
+
+    /// The hardcoded ID for the singleton AuthenticatorState Object.
+    const SUI_AUTHENTICATOR_STATE_ID: address = @0x7;
 
     /// Sender is not @0x0 the system address.
     const ENotSystemAddress: u64 = 0;
@@ -72,6 +76,7 @@ module sui::object {
 
     // === uid ===
 
+    #[allow(unused_function)]
     /// Create the `UID` for the singleton `SuiSystemState` object.
     /// This should only be called once from `sui_system`.
     fun sui_system_state(ctx: &TxContext): UID {
@@ -86,6 +91,14 @@ module sui::object {
     public(friend) fun clock(): UID {
         UID {
             id: ID { bytes: SUI_CLOCK_OBJECT_ID }
+        }
+    }
+
+    /// Create the `UID` for the singleton `AuthenticatorState` object.
+    /// This should only be called once from `authenticator_state`.
+    public(friend) fun authenticator_state(): UID {
+        UID {
+            id: ID { bytes: SUI_AUTHENTICATOR_STATE_ID }
         }
     }
 
@@ -182,36 +195,6 @@ module sui::object {
         aborts_if [abstract] true;
         // TODO: specify actual function behavior
      }
-
-    // Cost calibration functions
-    #[test_only]
-    public fun calibrate_address_from_bytes(bytes: vector<u8>) {
-        sui::address::from_bytes(bytes);
-    }
-
-    #[test_only]
-    public fun calibrate_address_from_bytes_nop(bytes: vector<u8>) {
-        let _ = bytes;
-    }
-
-    #[test_only]
-    public fun calibrate_borrow_uid<T: key>(obj: &T) {
-        borrow_uid(obj);
-    }
-    #[test_only]
-    public fun calibrate_borrow_uid_nop<T: key>(obj: &T) {
-        let _ = obj;
-    }
-
-    // TBD
-
-    // #[test_only]
-    // public fun calibrate_delete_impl(id: UID) {
-    //     delete_impl(id);
-    // }
-    // #[test_only]
-    // public fun calibrate_delete_impl(_id: UID) {
-    // }
 
     #[test_only]
     /// Return the most recent created object ID.

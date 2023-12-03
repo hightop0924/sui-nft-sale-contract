@@ -1,6 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#[allow(unused_const)]
 /// In addition to the fields declared in its type definition, a Sui object can have dynamic fields
 /// that can be added after the object has been constructed. Unlike ordinary field names
 /// (which are always statically declared identifiers) a dynamic field name can be any value with
@@ -23,6 +24,8 @@ module sui::dynamic_field {
     const EFieldTypeMismatch: u64 = 2;
     /// Failed to serialize the field's name
     const EBCSSerializationFailure: u64 = 3;
+    /// The object added as a dynamic field was previously a shared object
+    const ESharedObjectOperationNotSupported: u64 = 4;
 
     /// Internal object used for storing the field and value
     struct Field<Name: copy + drop + store, Value: store> has key {
@@ -193,6 +196,7 @@ module sui::dynamic_field {
         (id, object::id_to_address(value))
     }
 
+    /// May abort with `EBCSSerializationFailure`.
     public(friend) native fun hash_type_and_key<K: copy + drop + store>(parent: address, k: K): address;
 
     spec hash_type_and_key {
@@ -212,7 +216,8 @@ module sui::dynamic_field {
     }
 
     /// throws `EFieldDoesNotExist` if a child does not exist with that ID
-    /// or throws `EFieldTypeMismatch` if the type does not match
+    /// or throws `EFieldTypeMismatch` if the type does not match,
+    /// and may also abort with `EBCSSerializationFailure`
     /// we need two versions to return a reference or a mutable reference
     public(friend) native fun borrow_child_object<Child: key>(object: &UID, id: address): &Child;
 
@@ -233,7 +238,8 @@ module sui::dynamic_field {
     }
 
     /// throws `EFieldDoesNotExist` if a child does not exist with that ID
-    /// or throws `EFieldTypeMismatch` if the type does not match
+    /// or throws `EFieldTypeMismatch` if the type does not match,
+    /// and may also abort with `EBCSSerializationFailure`.
     public(friend) native fun remove_child_object<Child: key>(parent: address, id: address): Child;
 
     spec remove_child_object {

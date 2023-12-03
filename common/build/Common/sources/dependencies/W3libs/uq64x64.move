@@ -1,4 +1,6 @@
-/// Implementation of FixedPoint u64 in Move language.
+// Copyright (c) Web3 Labs, Inc.
+// SPDX-License-Identifier: GPL-3.0
+
 module w3libs::uq64x64 {
     // Error codes.
 

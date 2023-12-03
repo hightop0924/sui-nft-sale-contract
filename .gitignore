@@ -1,5 +1,5 @@
 /build/
 *.lock
 /nft/build/
-/seapad/build/
-/tokens/build/
+/common/build/
+/w3libs/build/

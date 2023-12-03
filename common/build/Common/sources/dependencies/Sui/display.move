@@ -40,7 +40,7 @@ module sui::display {
     /// Display<0x...::capy::Capy> {
     ///  fields:
     ///    <name, "Capy { genes }">
-    ///    <baseURI, "https://capy.art/capy/{ id }">
+    ///    <link, "https://capy.art/capy/{ id }">
     ///    <image, "https://api.capy.art/capy/{ id }/svg">
     ///    <description, "Lovely Capy, one of many">
     /// }
@@ -51,7 +51,7 @@ module sui::display {
     struct Display<phantom T: key> has key, store {
         id: UID,
         /// Contains fields for display. Currently supported
-        /// fields are: name, baseURI, image and description.
+        /// fields are: name, link, image and description.
         fields: VecMap<String, String>,
         /// Version that can only be updated manually by the Publisher.
         version: u16
@@ -102,6 +102,7 @@ module sui::display {
 
     // === Entry functions: Create ===
 
+    #[lint_allow(self_transfer)]
     /// Create a new empty Display<T> object and keep it.
     entry public fun create_and_keep<T: key>(pub: &Publisher, ctx: &mut TxContext) {
         transfer::public_transfer(new<T>(pub, ctx), sender(ctx))
@@ -201,6 +202,7 @@ module sui::display_tests {
     use sui::package;
     use sui::display;
 
+    #[allow(unused_field)]
     /// An example object.
     /// Purely for visibility.
     struct Capy has key {
@@ -220,7 +222,7 @@ module sui::display_tests {
         let display = display::new<Capy>(&pub, test::ctx(&mut test));
 
         display::add(&mut display, utf8(b"name"), utf8(b"Capy {name}"));
-        display::add(&mut display, utf8(b"baseURI"), utf8(b"https://capy.art/capy/{id}"));
+        display::add(&mut display, utf8(b"link"), utf8(b"https://capy.art/capy/{id}"));
         display::add(&mut display, utf8(b"image"), utf8(b"https://api.capy.art/capy/{id}/svg"));
         display::add(&mut display, utf8(b"description"), utf8(b"A Lovely Capy"));
 
