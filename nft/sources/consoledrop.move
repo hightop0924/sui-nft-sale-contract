@@ -1,7 +1,7 @@
 module consoledrop::consoledrop {
     use sui::object::{UID, id_address, uid_to_address};
     use sui::coin::Coin;
-    use consoledrop::nft_private::{PriNFT, mint_batch};
+    use consoledrop::nft_primary::{PriNFT, mint_batch};
     use sui::table::Table;
     use sui::tx_context::{TxContext, sender};
     use sui::object;
@@ -10,13 +10,14 @@ module consoledrop::consoledrop {
     use sui::coin;
     use sui::clock::Clock;
     use sui::clock;
-    use consoledrop::nft_private;
+    use consoledrop::nft_primary;
     use std::vector;
     use sui::event::emit;
     use sui::transfer::{public_transfer};
     use w3libs::u256;
     use sui::vec_map::VecMap;
     use sui::vec_map;
+    use common::kyc::{Kyc, hasKYC};
 
     struct CONSOLEDROP has drop {}
 
@@ -160,10 +161,16 @@ module consoledrop::consoledrop {
         //timestamp: when to vesting all nft
         fund: Coin<COIN>,
         //raised fund
+        publicSalePrice: u64,
+        //public sale price
         start_time: u64,
         //estimated start time, updated when realy started
         end_time: u64,
         //estimated end time, updated when realy ended
+        presale_start_time: u64,
+        //presale start time
+        presale_end_time: u64,
+        //presale end time
         participants: u64,
         //unique user joined
         total_sold_coin: u64,
@@ -172,6 +179,7 @@ module consoledrop::consoledrop {
         //total sold in nft count
         orders: Table<address, NftOrder>,
         //Buy order tables, use dynamic fields. if whitelist enabled: add whitelist address to this first that init order to zero
+        require_kyc: bool
     }
 
     struct NftRemoveCollection has copy, drop {
@@ -226,6 +234,8 @@ module consoledrop::consoledrop {
     const ERR_INVALID_ADMIN: u64 = 6022;
     const ERR_NFT_CAP: u64 = 6023;
     const ERR_BAD_ATTRIBUTE: u64 = 6024;
+    const ERR_NOT_KYC: u64 = 6025;
+    const ERR_INVALID_BUYERS: u64 = 6026;
 
 
     ///! NFT scope
@@ -237,9 +247,13 @@ module consoledrop::consoledrop {
                                  round: u8,
                                  use_whitelist: bool,
                                  vesting_time_ms: u64,
+                                 publicSalePrice: u64,
                                  start_time: u64,
                                  end_time: u64,
+                                 presale_start_time: u64,
+                                 presale_end_time: u64,
                                  system_clock: &Clock,
+                                 require_kyc: bool,
                                  ctx: &mut TxContext) {
         //@todo review validate
         assert!(soft_cap_percent > 0 && soft_cap_percent < 10000, ERR_INVALID_CAP);
@@ -247,6 +261,8 @@ module consoledrop::consoledrop {
         let ts_now_ms = clock::timestamp_ms(system_clock);
         assert!(vesting_time_ms > ts_now_ms, ERR_INVALID_VESTING_TIME);
         assert!(start_time > ts_now_ms && end_time > start_time, ERR_INVALID_START_STOP_TIME);
+        assert!(presale_start_time > ts_now_ms && presale_end_time > start_time, ERR_INVALID_START_STOP_TIME);
+        assert!(presale_end_time < start_time, ERR_INVALID_START_STOP_TIME);
 
         let pool = NftPool<COIN> {
             id: object::new(ctx),
@@ -260,12 +276,16 @@ module consoledrop::consoledrop {
             vesting_time_ms,
             owner,
             fund: coin::zero<COIN>(ctx),
+            publicSalePrice,
             start_time,
             end_time,
+            presale_start_time,
+            presale_end_time,
             participants: 0,
             total_sold_coin: 0,
             total_sold_nft: 0,
             orders: table::new<address, NftOrder>(ctx),
+            require_kyc
         };
 
         emit(NftPoolCreatedEvent {
@@ -363,6 +383,292 @@ module consoledrop::consoledrop {
         });
     }
 
+    public fun adminMint<COIN>(_adminCap: &NftAdminCap,
+                                to: address,
+                                nft_types: vector<u8>,
+                                nft_amounts: vector<u64>,
+                                pool: &mut NftPool<COIN>,
+                                system_clock: &Clock,
+                                kyc: &Kyc,
+                                ctx: &mut TxContext) {
+        //check pool state
+        assert!(pool.state == ROUND_STATE_RASING, ERR_NOT_FUNDRAISING);
+
+        //check whitelist
+        let buyer = to;
+        if (pool.require_kyc) {
+            assert!(hasKYC(buyer, kyc), ERR_NOT_KYC);
+        };
+        let hasOrder = table::contains(&pool.orders, buyer);
+        assert!(!pool.use_whitelist || hasOrder, ERR_NOT_IN_WHITELIST);
+
+        //check nft info
+        assert!(
+            vector::length<u64>(&nft_amounts) > 0 && (vector::length<u64>(&nft_amounts) == vector::length<u8>(
+                &nft_types
+            )),
+            ERR_BAD_NFT_INFO
+        );
+
+        //- type exist, unique types list
+        //- check max allocate per type
+        //- check hard cap per type
+        let orderIndex = vector::length<u8>(&nft_types);
+        let cost256 = u256::zero();
+        let totalNftAmt = 0u64;
+        let uniqTypes = vec_map::empty<u8, u64>();
+
+        while (orderIndex > 0) {
+            orderIndex = orderIndex - 1;
+
+            let nftType = *vector::borrow(&nft_types, orderIndex);
+            assert!(!vec_map::contains(&uniqTypes, &nftType), ERR_BAD_NFT_INFO);
+            let nftAmount = *vector::borrow(&nft_amounts, orderIndex);
+            assert!(nftAmount > 0 && nftType > 0 && table::contains(&pool.templates, nftType), ERR_BAD_NFT_INFO);
+            vec_map::insert(&mut uniqTypes, nftType, nftAmount);
+            let collection = table::borrow_mut(&mut pool.templates, nftType);
+
+            //check max allocate, support multi buy!
+            let nftSecured = if (!table::contains(&pool.orders, buyer)) {
+                0u64
+            } else {
+                let order = table::borrow(&pool.orders, buyer);
+                if (!vec_map::contains<u8, u64>(&order.secured_types, &nftType)) {
+                    0u64
+                }
+                else
+                    *vec_map::get(&order.secured_types, &nftType)
+            };
+
+            assert!(u256::add_u64(nftSecured, nftAmount) <= collection.allocate, ERR_OUTOF_ALLOCATE);
+
+            //check hardcap & save total sold
+            assert!(u256::add_u64(collection.sold, nftAmount) <= collection.cap, ERR_REACH_HARDCAP);
+            collection.sold = u256::add_u64(nftAmount, collection.sold);
+
+            cost256 = u256::mul_add(u256::from_u64(nftAmount), u256::from_u64(collection.price), cost256);
+            totalNftAmt = totalNftAmt + nftAmount;
+        };
+
+        //count unique participants
+        if (!hasOrder || table::borrow(&pool.orders, buyer).secured_coin > 0) {
+            pool.participants = u256::increment_u64(pool.participants);
+        };
+
+        //mint nfts
+        let nfts = vector::empty<PriNFT>();
+        let size = vector::length(&nft_types);
+
+        let securedTypes = if (hasOrder) {
+            &mut table::borrow_mut(&mut pool.orders, buyer).secured_types
+        }
+        else {
+            &mut vec_map::empty<u8, u64>()
+        };
+
+        while (size > 0) {
+            size = size - 1;
+            let nftType = *vector::borrow(&nft_types, size);
+            let nftAmt = *vector::borrow(&nft_amounts, size);
+            let collection = table::borrow(&pool.templates, nftType);
+            vector::append(&mut nfts, mint_nft_batch_int(nftAmt, collection, ctx));
+
+            //update secured types
+            let newTotalAmt = if (vec_map::contains<u8, u64>(securedTypes, &nftType)) {
+                let (_k, oldAmt) = vec_map::remove<u8, u64>(securedTypes, &nftType);
+                oldAmt + nftAmt
+            }else {
+                nftAmt
+            };
+            vec_map::insert<u8, u64>(securedTypes, nftType, newTotalAmt);
+        };
+
+        if (hasOrder) {
+            let order = table::borrow_mut(&mut pool.orders, buyer);
+            order.secured_coin = u256::add_u64(order.secured_coin, 0);
+            vector::append(&mut order.secured_nfts, nfts);
+        } else {
+            table::add(&mut pool.orders, buyer, NftOrder {
+                secured_coin: 0,
+                secured_nfts: nfts,
+                secured_types: *securedTypes
+            });
+        };
+        let order = table::borrow(&pool.orders, buyer);
+        let total_cost = order.secured_coin;
+        let nfts = &order.secured_nfts;
+
+        let total_raised = coin::value(&pool.fund);
+
+        let sold_out = if (total_raised == pool.hard_cap) {
+            pool.state = ROUND_STATE_CLAIM;
+            true
+        } else {
+            false
+        };
+
+        emit(NftPoolBuyEvent {
+            pool: uid_to_address(&pool.id),
+            buyer,
+            amount: totalNftAmt,
+            cost: 0,
+            timestamp: clock::timestamp_ms(system_clock),
+            nft_types,
+            nft_amounts,
+            total_nft_bought: vector::length(nfts),
+            total_cost,
+            participants: pool.participants,
+            total_raised,
+            sold_out
+        })
+    }
+
+    public fun airdropAdminMint<COIN>( _adminCap: &NftAdminCap,
+                                        to: vector<address>,
+                                        nft_types: vector<u8>,
+                                        nft_amounts: vector<u64>,
+                                        pool: &mut NftPool<COIN>,
+                                        system_clock: &Clock,
+                                        kyc: &Kyc,
+                                        ctx: &mut TxContext) {
+        //check pool state
+        assert!(pool.state == ROUND_STATE_RASING, ERR_NOT_FUNDRAISING);
+
+        let buyers = vector::length<address>(&to);
+        assert!(buyers > 0, ERR_INVALID_BUYERS);
+        while (buyers > 0) {
+            buyers = buyers - 1;
+            //check whitelist
+            let buyer = *vector::borrow(&to, buyers);
+            if (pool.require_kyc) {
+                assert!(hasKYC(buyer, kyc), ERR_NOT_KYC);
+            };
+            let hasOrder = table::contains(&pool.orders, buyer);
+            assert!(!pool.use_whitelist || hasOrder, ERR_NOT_IN_WHITELIST);
+
+            //check nft info
+            assert!(
+                vector::length<u64>(&nft_amounts) > 0 && (vector::length<u64>(&nft_amounts) == vector::length<u8>(
+                    &nft_types
+                )),
+                ERR_BAD_NFT_INFO
+            );
+
+            //- type exist, unique types list
+            //- check max allocate per type
+            //- check hard cap per type
+            let orderIndex = vector::length<u8>(&nft_types);
+            let cost256 = u256::zero();
+            let totalNftAmt = 0u64;
+            let uniqTypes = vec_map::empty<u8, u64>();
+
+            while (orderIndex > 0) {
+                orderIndex = orderIndex - 1;
+
+                let nftType = *vector::borrow(&nft_types, orderIndex);
+                assert!(!vec_map::contains(&uniqTypes, &nftType), ERR_BAD_NFT_INFO);
+                let nftAmount = *vector::borrow(&nft_amounts, orderIndex);
+                assert!(nftAmount > 0 && nftType > 0 && table::contains(&pool.templates, nftType), ERR_BAD_NFT_INFO);
+                vec_map::insert(&mut uniqTypes, nftType, nftAmount);
+                let collection = table::borrow_mut(&mut pool.templates, nftType);
+
+                //check max allocate, support multi buy!
+                let nftSecured = if (!table::contains(&pool.orders, buyer)) {
+                    0u64
+                } else {
+                    let order = table::borrow(&pool.orders, buyer);
+                    if (!vec_map::contains<u8, u64>(&order.secured_types, &nftType)) {
+                        0u64
+                    }
+                    else
+                        *vec_map::get(&order.secured_types, &nftType)
+                };
+
+                assert!(u256::add_u64(nftSecured, nftAmount) <= collection.allocate, ERR_OUTOF_ALLOCATE);
+
+                //check hardcap & save total sold
+                assert!(u256::add_u64(collection.sold, nftAmount) <= collection.cap, ERR_REACH_HARDCAP);
+                collection.sold = u256::add_u64(nftAmount, collection.sold);
+
+                cost256 = u256::mul_add(u256::from_u64(nftAmount), u256::from_u64(collection.price), cost256);
+                totalNftAmt = totalNftAmt + nftAmount;
+            };
+
+            //count unique participants
+            if (!hasOrder || table::borrow(&pool.orders, buyer).secured_coin > 0) {
+                pool.participants = u256::increment_u64(pool.participants);
+            };
+
+            //mint nfts
+            let nfts = vector::empty<PriNFT>();
+            let size = vector::length(&nft_types);
+
+            let securedTypes = if (hasOrder) {
+                &mut table::borrow_mut(&mut pool.orders, buyer).secured_types
+            }
+            else {
+                &mut vec_map::empty<u8, u64>()
+            };
+
+            while (size > 0) {
+                size = size - 1;
+                let nftType = *vector::borrow(&nft_types, size);
+                let nftAmt = *vector::borrow(&nft_amounts, size);
+                let collection = table::borrow(&pool.templates, nftType);
+                vector::append(&mut nfts, mint_nft_batch_int(nftAmt, collection, ctx));
+
+                //update secured types
+                let newTotalAmt = if (vec_map::contains<u8, u64>(securedTypes, &nftType)) {
+                    let (_k, oldAmt) = vec_map::remove<u8, u64>(securedTypes, &nftType);
+                    oldAmt + nftAmt
+                }else {
+                    nftAmt
+                };
+                vec_map::insert<u8, u64>(securedTypes, nftType, newTotalAmt);
+            };
+
+            if (hasOrder) {
+                let order = table::borrow_mut(&mut pool.orders, buyer);
+                order.secured_coin = u256::add_u64(order.secured_coin, 0);
+                vector::append(&mut order.secured_nfts, nfts);
+            } else {
+                table::add(&mut pool.orders, buyer, NftOrder {
+                    secured_coin: 0,
+                    secured_nfts: nfts,
+                    secured_types: *securedTypes
+                });
+            };
+            let order = table::borrow(&pool.orders, buyer);
+            let total_cost = order.secured_coin;
+            let nfts = &order.secured_nfts;
+
+            let total_raised = coin::value(&pool.fund);
+
+            let sold_out = if (total_raised == pool.hard_cap) {
+                pool.state = ROUND_STATE_CLAIM;
+                true
+            } else {
+                false
+            };
+
+            emit(NftPoolBuyEvent {
+                pool: uid_to_address(&pool.id),
+                buyer,
+                amount: totalNftAmt,
+                cost: 0,
+                timestamp: clock::timestamp_ms(system_clock),
+                nft_types,
+                nft_amounts,
+                total_nft_bought: vector::length(nfts),
+                total_cost,
+                participants: pool.participants,
+                total_raised,
+                sold_out
+            })
+        };
+    }
+
+
     ///@todo review code
     ///Buy multiple nft items with count, with coin in should afford total cost
     public fun buy_nft<COIN>(coin_in: &mut Coin<COIN>,
@@ -370,12 +676,16 @@ module consoledrop::consoledrop {
                              nft_amounts: vector<u64>,
                              pool: &mut NftPool<COIN>,
                              system_clock: &Clock,
+                             kyc: &Kyc,
                              ctx: &mut TxContext) {
         //check pool state
         assert!(pool.state == ROUND_STATE_RASING, ERR_NOT_FUNDRAISING);
 
         //check whitelist
         let buyer = sender(ctx);
+        if (pool.require_kyc) {
+            assert!(hasKYC(buyer, kyc), ERR_NOT_KYC);
+        };
         let hasOrder = table::contains(&pool.orders, buyer);
         assert!(!pool.use_whitelist || hasOrder, ERR_NOT_IN_WHITELIST);
 
@@ -400,9 +710,10 @@ module consoledrop::consoledrop {
             orderIndex = orderIndex - 1;
 
             let nftType = *vector::borrow(&nft_types, orderIndex);
-            assert!(vec_map::contains(&uniqTypes, &nftType), ERR_BAD_NFT_INFO);
+            assert!(!vec_map::contains(&uniqTypes, &nftType), ERR_BAD_NFT_INFO);
             let nftAmount = *vector::borrow(&nft_amounts, orderIndex);
             assert!(nftAmount > 0 && nftType > 0 && table::contains(&pool.templates, nftType), ERR_BAD_NFT_INFO);
+            vec_map::insert(&mut uniqTypes, nftType, nftAmount);
 
             let collection = table::borrow_mut(&mut pool.templates, nftType);
 
@@ -664,7 +975,7 @@ module consoledrop::consoledrop {
         let size = vector::length<PriNFT>(&secured_nfts);
         while (size > 0) {
             size = size - 1;
-            nft_private::burn(vector::pop_back(&mut secured_nfts))
+            nft_primary::burn(vector::pop_back(&mut secured_nfts))
         };
         vector::destroy_empty(secured_nfts);
 

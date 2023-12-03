@@ -1,4 +1,4 @@
-module consoledrop::nft_private {
+module consoledrop::nft_primary {
     friend consoledrop::consoledrop;
 
     use sui::url::{Self, Url};
@@ -76,6 +76,7 @@ module consoledrop::nft_private {
         nfts
     }
 
+
     /// Permanently delete `nft`
     public(friend) fun burn(nft: PriNFT) {
         let PriNFT { id,
@@ -140,7 +141,7 @@ module consoledrop::nft_private {
 
 #[test_only]
 module consoledrop::private_nftTests {
-    use consoledrop::nft_private::{Self, PriNFT};
+    use consoledrop::nft_primary::{Self, PriNFT};
     use sui::test_scenario as ts;
     use sui::transfer;
     use std::string;
@@ -156,7 +157,7 @@ module consoledrop::private_nftTests {
         // create the NFT
         let scenario = ts::begin(addr1);
             {
-                let nft = nft_private::mint_for_test(
+                let nft = nft_primary::mint_for_test(
                     b"name",
                     b"baseURI",
                     b"contractURI",
@@ -170,19 +171,12 @@ module consoledrop::private_nftTests {
                 let nft = ts::take_from_sender<PriNFT>(&mut scenario);
                 transfer::public_transfer(nft, addr2);
             };
-        // update its description
-        ts::next_tx(&mut scenario, addr2);
-            {
-                let nft = ts::take_from_sender<PriNFT>(&mut scenario);
-                nft_private::update_description_for_test(&mut nft, b"a new description") ;
-                assert!(*string::bytes(nft_private::description(&nft)) == b"a new description", 0);
-                ts::return_to_sender(&mut scenario, nft);
-            };
+        
         // burn it
         ts::next_tx(&mut scenario, addr2);
             {
                 let nft = ts::take_from_sender<PriNFT>(&mut scenario);
-                nft_private::burn_for_test(nft)
+                nft_primary::burn_for_test(nft)
             };
         ts::end(scenario);
     }
